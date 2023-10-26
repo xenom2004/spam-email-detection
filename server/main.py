@@ -1,24 +1,63 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from transformers import pipeline
 import json
 
-pipe = pipeline("text-classification", model="joeddav/distilbert-base-uncased-go-emotions-student", top_k=None)
+import numpy as np
+import pandas as pd
+import csv
+import sklearn
+import pickle
+import pandas as pd
+import numpy as np
+import nltk
+from sklearn.feature_extraction.text import TfidfVectorizer
+vectorizer = TfidfVectorizer()
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import GridSearchCV,train_test_split,StratifiedKFold,cross_val_score,learning_curve
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+import joblib
+import nltk
 
+_vectorizer = joblib.load('tfidf_vectorizer.pkl')
+loaded_model = joblib.load('multinomialnb_model.pkl')
+nltk.download('stopwords')
+from nltk.corpus import stopwords
+#remove the punctuations and stopwords
+import string
+def text_process(text):
+
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    text = [word for word in text.split() if word.lower() not in stopwords.words('english')]
+
+    return " ".join(text)
+def find(x):
+    if x == 1:
+        return ("Message is SPAM")
+    else:
+        return ("Message is NOT SPAM")    
+def predictR(st,mnb=loaded_model):
+  processed= pd.Series(st).apply(text_process)
+  z=_vectorizer.transform(processed)
+  mnb_predictions = mnb.predict(z)
+  return find(mnb_predictions[0])
 
 class Input_Text(BaseModel):
     input_text: str
 
 app = FastAPI()
 
-origins = [
-    "http://localhost:3000"
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,24 +70,5 @@ async def root():
 
 @app.post("/")
 async def receive_text(item: Input_Text):
-    inference_text = item.input_text
-    data = pipe(inference_text)
-
-    output = []
-    max_score_entry = {'label':'', 'score':0}
-    base_data = data[0].copy()
-    for i in range(0, len(data[0])):
-        for score in base_data:
-            if max_score_entry['score']<score['score']:
-                max_score_entry = score
-                base_data.remove(score)
-        output.append(max_score_entry)
-        max_score_entry = {'label':'', 'score':0}
-
-    output_dict = {}
-    for i in range(0, len(output)):
-        output_dict[i] = output[i]
-        
-    payload = json.dumps(output_dict)
-
-    return payload
+    print(predictR(item.input_text))
+    return {"message": predictR(item.input_text)}
